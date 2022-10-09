@@ -78,14 +78,27 @@ static const GLchar *GLFrag =
 	"	gl_FragColor = vec4(rgb, 1.0);\n"
 	"}\n";
 
+#define DEFAULT_AUDIO_FORMAT AUDIO_F32SYS
+
 void SDLCALL AudioCallback(void *userdata, Uint8* stream, int len)
 {
+#if DEFAULT_AUDIO_FORMAT == AUDIO_F32SYS
 	const int samples = len / 4;
 	int read = tf_readaudio((OggTheora_File*) userdata, (float*) stream, samples);
 	if (read < samples)
 	{
 		SDL_memset(stream + read * 4, '\0', (samples - read) * 4);
 	}
+#elif DEFAULT_AUDIO_FORMAT == AUDIO_S16SYS
+	const int samples = len / 2;
+	int read = tf_readaudio_s16((OggTheora_File*) userdata, (ogg_int16_t*) stream, samples);
+	if (read < samples)
+	{
+		SDL_memset(stream + read * 2, '\0', (samples - read) * 2);
+	}
+#else
+#error Unsupported audio format
+#endif
 }
 
 int main(int argc, char **argv)
@@ -195,7 +208,7 @@ int main(int argc, char **argv)
 		tf_audioinfo(&fileIn, &channels, &samplerate);
 		SDL_zero(spec);
 		spec.freq = samplerate;
-		spec.format = AUDIO_F32;
+		spec.format = DEFAULT_AUDIO_FORMAT;
 		spec.channels = channels;
 		spec.samples = 4096;
 		spec.callback = AudioCallback;

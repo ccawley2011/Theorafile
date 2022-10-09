@@ -29,7 +29,11 @@
 #define THEORAFILE_H
 
 #include <theora/theoradec.h>
+#ifdef THEORAFILE_USE_TREMOR
+#include <tremor/ivorbiscodec.h>
+#else
 #include <vorbis/codec.h>
+#endif
 
 #ifdef __cplusplus
 extern "C"
@@ -136,6 +140,7 @@ DECLSPEC void tf_reset(OggTheora_File *file);
  */
 DECLSPEC int tf_readvideo(OggTheora_File *file, char *buffer, int numframes);
 DECLSPEC int tf_readaudio(OggTheora_File *file, float *buffer, int samples);
+DECLSPEC int tf_readaudio_s16(OggTheora_File *file, ogg_int16_t *buffer, int samples);
 
 /* Support for multiple audio tracks in a single file
  *

@@ -643,7 +643,12 @@ int tf_readaudio(OggTheora_File *file, float *buffer, int samples)
 	int offset = 0;
 	int chan, frame;
 	ogg_packet packet;
+#ifdef THEORAFILE_USE_TREMOR
+	ogg_int32_t **pcm = NULL;
+	int val;
+#else
 	float **pcm = NULL;
+#endif
 
 	while (offset < samples)
 	{
@@ -654,7 +659,77 @@ int tf_readaudio(OggTheora_File *file, float *buffer, int samples)
 			for (frame = 0; frame < frames; frame += 1)
 			for (chan = 0; chan < file->vinfo[file->vtrack].channels; chan += 1)
 			{
+#ifdef THEORAFILE_USE_TREMOR
+				/* TODO: Avoid losing precision if possible */
+				val = pcm[chan][frame] >> 9;
+				if (val >  32767) val =  32767;
+				if (val < -32768) val = -32768;
+				buffer[offset++] = (float)val * 0.000030517578125f;
+#else
 				buffer[offset++] = pcm[chan][frame];
+#endif
+				if (offset >= samples)
+				{
+					vorbis_synthesis_read(
+						&file->vdsp,
+						frame
+					);
+					return offset;
+				}
+			}
+			vorbis_synthesis_read(&file->vdsp, frames);
+		}
+		else /* No audio available left in current packet? */
+		{
+			/* Keep trying to get a usable packet */
+			if (!INTERNAL_getNextPacket(file, &file->vstream[file->vtrack], &packet))
+			{
+				/* ... unless there's nothing left for us to read. */
+				return offset;
+			}
+			if (vorbis_synthesis(
+				&file->vblock,
+				&packet
+			) == 0) {
+				vorbis_synthesis_blockin(
+					&file->vdsp,
+					&file->vblock
+				);
+			}
+		}
+	}
+	return offset;
+}
+
+int tf_readaudio_s16(OggTheora_File *file, ogg_int16_t *buffer, int samples)
+{
+	int offset = 0;
+	int chan, frame, val;
+	ogg_packet packet;
+#ifdef THEORAFILE_USE_TREMOR
+	ogg_int32_t **pcm = NULL;
+#else
+	float **pcm = NULL;
+#endif
+
+	while (offset < samples)
+	{
+		const int frames = vorbis_synthesis_pcmout(&file->vdsp, &pcm);
+		if (frames > 0)
+		{
+			/* I bet this beats the crap out of the CPU cache... */
+			for (frame = 0; frame < frames; frame += 1)
+			for (chan = 0; chan < file->vinfo[file->vtrack].channels; chan += 1)
+			{
+#ifdef THEORAFILE_USE_TREMOR
+				val = pcm[chan][frame] >> 9;
+#else
+				val = (int)(pcm[chan][frame]*32767.f);
+#endif
+				if (val >  32767) val =  32767;
+				if (val < -32768) val = -32768;
+				buffer[offset++] = val;
+
 				if (offset >= samples)
 				{
 					vorbis_synthesis_read(
